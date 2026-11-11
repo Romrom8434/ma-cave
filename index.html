@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ma Cave</title>
+<meta name="theme-color" content="#4a0e1c">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root{
+    --bg:#f7f2ee; --card:#fff; --ink:#2b1b1f; --muted:#8a7a7e; --line:#eadfd9;
+    --wine:#7a1730; --wine-d:#4a0e1c; --gold:#c9a24d;
+    --rouge:#8e1b34; --blanc:#d9c16a; --rose:#e78ea3; --bulles:#9fc3d6; --moelleux:#d6893a; --autre:#9a8f92;
+    --r:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{position:sticky;top:0;z-index:5;background:var(--wine-d);color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 16px 12px}
+  header h1{margin:0;font-size:22px;font-family:Georgia,serif;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
+  header .stats{font-size:13px;opacity:.85;margin-top:4px}
+  .toolbar{display:flex;gap:8px;margin-top:10px}
+  .toolbar input,.toolbar select{flex:1;min-width:0;border:0;border-radius:10px;padding:9px 11px;font-size:15px;background:#ffffff1f;color:#fff}
+  .toolbar input::placeholder{color:#ffffffaa}
+  .toolbar select option{color:#000}
+  .chips{display:flex;gap:6px;overflow-x:auto;padding:10px 16px 2px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:none;border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font-size:14px;color:var(--ink)}
+  .chip.on{background:var(--wine);border-color:var(--wine);color:#fff}
+  main{padding:8px 12px calc(100px + env(safe-area-inset-bottom))}
+  .group-title{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:16px 6px 6px}
+  .wcard{display:flex;gap:12px;align-items:center;background:var(--card);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 2px #0000000d;cursor:pointer}
+  .wcard .dot{width:10px;align-self:stretch;border-radius:6px;flex:none}
+  .wcard img{width:44px;height:56px;object-fit:contain;border-radius:6px;background:#faf7f5;flex:none}
+  .wcard .info{flex:1;min-width:0}
+  .wcard .name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wcard .sub{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wcard .gift{font-size:12px;color:var(--wine)}
+  .wcard .right{text-align:right;flex:none}
+  .wcard .year{font-family:Georgia,serif;font-size:18px;font-weight:700}
+  .wcard .qty{font-size:12px;color:var(--muted)}
+  .empty{text-align:center;color:var(--muted);padding:60px 20px}
+  .empty .big{font-size:48px}
+  .fab{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom));display:flex;gap:10px;z-index:6}
+  .fab button{border:0;border-radius:999px;padding:14px 18px;font-size:16px;font-weight:600;box-shadow:0 4px 14px #4a0e1c55}
+  .btn-primary{background:var(--wine);color:#fff}
+  .btn-light{background:#fff;color:var(--wine)}
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;padding:11px 14px;font-size:15px;font-weight:500}
+  .btn.full{width:100%}
+  .btn.wine{background:var(--wine);border-color:var(--wine);color:#fff}
+  .btn.danger{color:#b3261e;border-color:#f0c9c6}
+  /* sheets */
+  .sheet-bg{position:fixed;inset:0;background:#0007;z-index:20;display:none;align-items:flex-end;justify-content:center}
+  .sheet-bg.open{display:flex}
+  .sheet{background:var(--bg);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:18px 16px calc(20px + env(safe-area-inset-bottom))}
+  .sheet h2{margin:0 0 12px;font-family:Georgia,serif;font-size:20px;display:flex;justify-content:space-between;align-items:center}
+  .sheet h2 .x{border:0;background:none;font-size:26px;color:var(--muted);line-height:1}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  .field{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:16px;background:#fff;color:var(--ink)}
+  textarea.field{min-height:64px;resize:vertical}
+  .row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
+  .types{display:flex;flex-wrap:wrap;gap:6px}
+  .types button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:14px;display:flex;align-items:center;gap:6px}
+  .types button i{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .types button.on{border-color:var(--wine);background:#7a17301a;font-weight:600}
+  .actions{display:flex;gap:8px;margin-top:16px}.actions>*{flex:1}
+  #reader{width:100%;border-radius:14px;overflow:hidden;background:#000;min-height:220px}
+  #reader video{border-radius:14px}
+  .hint{font-size:13px;color:var(--muted);margin:8px 0}
+  .status{font-size:14px;padding:10px 12px;border-radius:10px;margin:10px 0;display:none}
+  .status.show{display:block}
+  .status.ok{background:#e6f4ea;color:#1e6b34}
+  .status.warn{background:#fff4e0;color:#8a5a00}
+  .status.err{background:#fde7e6;color:#9b1c14}
+  .detail-head{display:flex;gap:14px;align-items:flex-start}
+  .detail-head img{width:80px;height:110px;object-fit:contain;background:#fff;border-radius:10px}
+  .kv{background:#fff;border-radius:12px;padding:4px 12px;margin-top:12px}
+  .kv div{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:15px}
+  .kv div:last-child{border-bottom:0}
+  .kv span:first-child{color:var(--muted)}
+  .kv span:last-child{text-align:right}
+  .price-links{display:flex;gap:8px;margin-top:8px}.price-links a{flex:1;text-align:center;text-decoration:none;font-size:14px}
+  .qty-ctrl{display:flex;align-items:center;gap:10px}
+  .qty-ctrl button{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:#fff;font-size:20px}
+  .qty-ctrl b{min-width:28px;text-align:center;font-size:18px}
+  .toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));transform:translateX(-50%) translateY(-20px);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:.25s;z-index:40;pointer-events:none;max-width:90vw}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .menu-btn{margin-left:auto;border:0;background:#ffffff1f;color:#fff;border-radius:10px;padding:6px 10px;font-size:18px}
+  .tabs{display:flex;background:#ffffff1f;border-radius:10px;padding:3px;margin-top:10px}
+  .tabs button{flex:1;border:0;background:none;color:#fff;padding:7px;border-radius:8px;font-size:14px}
+  .tabs button.on{background:#fff;color:var(--wine-d);font-weight:600}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🍷 Ma Cave <button class="menu-btn" id="menuBtn" aria-label="Menu">⋯</button></h1>
+  <div class="stats" id="stats"></div>
+  <div class="tabs">
+    <button class="on" data-tab="cave">En cave</button>
+    <button data-tab="bues">Bues</button>
+  </div>
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="Rechercher un vin, un domaine, une personne…">
+    <select id="sort" aria-label="Trier">
+      <option value="cave">Par cave</option>
+      <option value="type">Par type</option>
+      <option value="year">Par millésime</option>
+      <option value="name">Par nom</option>
+      <option value="recent">Ajout récent</option>
+    </select>
+  </div>
+</header>
+
+<div class="chips" id="typeChips"></div>
+<main id="list"></main>
+
+<div class="fab">
+  <button class="btn-light" id="addManualBtn">＋</button>
+  <button class="btn-primary" id="scanBtn">📷 Scanner</button>
+</div>
+
+<!-- Scan -->
+<div class="sheet-bg" id="scanSheet">
+  <div class="sheet">
+    <h2>Scanner une bouteille <button class="x" data-close>×</button></h2>
+    <div id="reader"></div>
+    <p class="hint">Vise le code-barres de l'étiquette arrière, bien à plat et éclairé.</p>
+    <div class="status" id="scanStatus"></div>
+    <label>Ou tape le code-barres</label>
+    <div class="row">
+      <input class="field" id="manualCode" inputmode="numeric" placeholder="ex. 3175529657725">
+      <button class="btn wine" style="flex:none" id="manualCodeBtn">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Formulaire -->
+<div class="sheet-bg" id="formSheet">
+  <div class="sheet">
+    <h2><span id="formTitle">Nouvelle bouteille</span> <button class="x" data-close>×</button></h2>
+    <div class="status" id="formStatus"></div>
+    <input type="hidden" id="f_id">
+    <input type="hidden" id="f_image">
+    <input type="hidden" id="f_barcode">
+    <label>Nom du vin *</label>
+    <input class="field" id="f_name" placeholder="ex. Château Lynch-Bages">
+    <label>Domaine / producteur</label>
+    <input class="field" id="f_producer" placeholder="ex. Famille Cazes">
+    <div class="row">
+      <div><label>Millésime</label><input class="field" id="f_year" inputmode="numeric" maxlength="4" placeholder="ex. 2015"></div>
+      <div><label>Nombre</label>
+        <div class="qty-ctrl"><button type="button" id="qMinus">−</button><b id="f_qty">1</b><button type="button" id="qPlus">+</button></div>
+      </div>
+    </div>
+    <label>Type</label>
+    <div class="types" id="f_types"></div>
+    <label>Appellation / région</label>
+    <input class="field" id="f_region" placeholder="ex. Pauillac, Bordeaux">
+    <label>Cave / emplacement</label>
+    <input class="field" id="f_cellar" list="cellarList" placeholder="ex. Cave principale, Casier 3">
+    <datalist id="cellarList"></datalist>
+    <label>Offert par (facultatif)</label>
+    <input class="field" id="f_giftFrom" list="giftList" placeholder="ex. Papa">
+    <datalist id="giftList"></datalist>
+    <label>Prix estimé par bouteille (€)</label>
+    <input class="field" id="f_price" inputmode="decimal" placeholder="ex. 45">
+    <div class="price-links" id="formPriceLinks"></div>
+    <label>Notes</label>
+    <textarea class="field" id="f_notes" placeholder="À boire avant 2030, accord gibier…"></textarea>
+    <div class="actions">
+      <button class="btn" data-close>Annuler</button>
+      <button class="btn wine" id="saveBtn">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Détail -->
+<div class="sheet-bg" id="detailSheet">
+  <div class="sheet" id="detailBody"></div>
+</div>
+
+<!-- Menu -->
+<div class="sheet-bg" id="menuSheet">
+  <div class="sheet">
+    <h2>Réglages <button class="x" data-close>×</button></h2>
+    <p class="hint">Tes vins sont enregistrés sur ce téléphone. Fais une sauvegarde de temps en temps pour ne rien perdre.</p>
+    <div style="display:grid;gap:8px">
+      <button class="btn full" id="exportBtn">💾 Exporter une sauvegarde</button>
+      <button class="btn full" id="importBtn">📂 Importer une sauvegarde</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+      <button class="btn full danger" id="wipeBtn">Tout effacer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ========= Données ========= */
+const TYPES = [
+  {k:'rouge', label:'Rouge', c:'var(--rouge)'},
+  {k:'blanc', label:'Blanc', c:'var(--blanc)'},
+  {k:'rose', label:'Rosé', c:'var(--rose)'},
+  {k:'effervescent', label:'Effervescent', c:'var(--bulles)'},
+  {k:'moelleux', label:'Moelleux / liquoreux', c:'var(--moelleux)'},
+  {k:'autre', label:'Autre', c:'var(--autre)'},
+];
+const typeOf = k => TYPES.find(t=>t.k===k) || TYPES[5];
+const KEY = 'macave.v1';
+let db = load();
+let ui = {tab:'cave', type:'all', q:'', sort: safeGet('macave.sort') || 'cave'};
+
+function safeGet(k){ try{return localStorage.getItem(k)}catch(e){return null} }
+function safeSet(k,v){ try{localStorage.setItem(k,v); return true}catch(e){return false} }
+function load(){
+  try{ const d = JSON.parse(localStorage.getItem(KEY)); if(d && Array.isArray(d.wines)) return d; }catch(e){}
+  return {wines:[], drunk:[]};
+}
+function save(){ if(!safeSet(KEY, JSON.stringify(db))) toast("⚠️ Impossible d'enregistrer sur cet appareil"); }
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const euro = n => n.toLocaleString('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+const $ = id => document.getElementById(id);
+
+/* ========= Liste ========= */
+function render(){
+  const inCave = ui.tab==='cave';
+  const src = inCave ? db.wines : db.drunk;
+  const bottles = db.wines.reduce((s,w)=>s+(w.qty||1),0);
+  const value = db.wines.reduce((s,w)=>s+(parseFloat(w.price)||0)*(w.qty||1),0);
+  $('stats').textContent = `${bottles} bouteille${bottles>1?'s':''} · ${db.wines.length} référence${db.wines.length>1?'s':''}` + (value? ` · ≈ ${euro(value)}`:'');
+
+  // chips
+  const counts = {}; src.forEach(w=>counts[w.type]=(counts[w.type]||0)+(inCave?(w.qty||1):1));
+  $('typeChips').innerHTML = `<button class="chip ${ui.type==='all'?'on':''}" data-type="all">Tous</button>` +
+    TYPES.filter(t=>counts[t.k]).map(t=>`<button class="chip ${ui.type===t.k?'on':''}" data-type="${t.k}">${t.label} · ${counts[t.k]}</button>`).join('');
+
+  const q = ui.q.trim().toLowerCase();
+  let items = src.filter(w => (ui.type==='all'||w.type===ui.type) &&
+    (!q || [w.name,w.producer,w.region,w.cellar,w.giftFrom,w.year,w.notes].join(' ').toLowerCase().includes(q)));
+
+  if(!items.length){
+    $('list').innerHTML = `<div class="empty"><div class="big">${inCave?'🍾':'🥂'}</div>${
+      src.length ? 'Aucun vin ne correspond.' : inCave ? 'Ta cave est vide.<br>Appuie sur <b>Scanner</b> pour ajouter ta première bouteille.' : 'Aucune bouteille bue pour l’instant.'}</div>`;
+    return;
+  }
+
+  const sort = inCave ? ui.sort : 'drunk';
+  const by = {
+    name:(a,b)=>a.name.localeCompare(b.name,'fr'),
+    year:(a,b)=>(+a.year||9999)-(+b.year||9999),
+    recent:(a,b)=>(b.addedAt||0)-(a.addedAt||0),
+    drunk:(a,b)=>(b.drunkAt||0)-(a.drunkAt||0),
+  };
+  let groups;
+  if(sort==='cave'){
+    groups = groupBy(items, w=>w.cellar||'Sans emplacement');
+  } else if(sort==='type'){
+    groups = groupBy(items, w=>typeOf(w.type).label, TYPES.map(t=>t.label));
+  } else {
+    groups = [['', items.sort(by[sort])]];
+  }
+  $('list').innerHTML = groups.map(([g,ws])=>
+    (g?`<div class="group-title">${esc(g)} · ${ws.reduce((s,w)=>s+(inCave?(w.qty||1):1),0)}</div>`:'') +
+    ws.map(card).join('')).join('');
+}
+function groupBy(items, fn, order){
+  const m = new Map();
+  items.forEach(w=>{const k=fn(w); if(!m.has(k)) m.set(k,[]); m.get(k).push(w)});
+  let arr = [...m.entries()];
+  arr.forEach(([,ws])=>ws.sort((a,b)=>(+a.year||9999)-(+b.year||9999)||a.name.localeCompare(b.name,'fr')));
+  if(order) arr.sort((a,b)=>order.indexOf(a[0])-order.indexOf(b[0]));
+  else arr.sort((a,b)=>a[0].localeCompare(b[0],'fr'));
+  return arr;
+}
+function card(w){
+  const t = typeOf(w.type);
+  const sub = [w.producer, w.region].filter(Boolean).join(' · ') || t.label;
+  const right = ui.tab==='cave'
+    ? `<div class="year">${esc(w.year||'—')}</div><div class="qty">${(w.qty||1)>1?'×'+w.qty:''}</div>`
+    : `<div class="year">${esc(w.year||'—')}</div><div class="qty">${w.drunkAt?new Date(w.drunkAt).toLocaleDateString('fr-FR'):''}</div>`;
+  return `<div class="wcard" data-id="${w.id}">
+    <div class="dot" style="background:${t.c}"></div>
+    ${w.image?`<img src="${esc(w.image)}" alt="" loading="lazy" onerror="this.remove()">`:''}
+    <div class="info"><div class="name">${esc(w.name)}</div><div class="sub">${esc(sub)}</div>
+    ${w.giftFrom?`<div class="gift">🎁 Offert par ${esc(w.giftFrom)}</div>`:''}</div>
+    <div class="right">${right}</div></div>`;
+}
+
+/* ========= Sheets ========= */
+function open(id){ $(id).classList.add('open'); }
+function close(id){ $(id).classList.remove('open'); if(id==='scanSheet') stopScan(); }
+document.querySelectorAll('.sheet-bg').forEach(bg=>{
+  bg.addEventListener('click', e=>{ if(e.target===bg || e.target.closest('[data-close]')) close(bg.id); });
+});
+function status(el, cls, msg){ const s=$(el); s.className='status show '+cls; s.innerHTML=msg; }
+function clearStatus(el){ $(el).className='status'; }
+let toastT; function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200); }
+
+/* ========= Scanner ========= */
+let scanner=null, scanning=false, busy=false;
+async function startScan(){
+  clearStatus('scanStatus'); $('manualCode').value=''; busy=false;
+  open('scanSheet');
+  if(typeof Html5Qrcode==='undefined'){ status('scanStatus','warn',"Le scanner n'a pas pu se charger (connexion ?). Tape le code à la main."); return; }
+  try{
+    const F = Html5QrcodeSupportedFormats;
+    scanner = scanner || new Html5Qrcode('reader',{formatsToSupport:[F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E], experimentalFeatures:{useBarCodeDetectorIfSupported:true}, verbose:false});
+    await scanner.start({facingMode:'environment'}, {fps:12, qrbox:(w,h)=>({width:Math.min(w*0.85,320),height:Math.min(h*0.45,140)})}, onCode, ()=>{});
+    scanning=true;
+  }catch(e){
+    status('scanStatus','err',"Impossible d'accéder à l'appareil photo. Autorise la caméra dans les réglages du navigateur, ou tape le code à la main.");
+  }
+}
+async function stopScan(){ if(scanner && scanning){ try{ await scanner.stop(); }catch(e){} scanning=false; } }
+function onCode(code){
+  if(busy) return; busy=true;
+  if(navigator.vibrate) navigator.vibrate(80);
+  handleCode(code);
+}
+$('manualCodeBtn').onclick = ()=>{ const c=$('manualCode').value.replace(/\D/g,''); if(c.length>=8){ busy=true; handleCode(c);} else status('scanStatus','warn','Le code doit faire au moins 8 chiffres.'); };
+$('manualCode').addEventListener('keydown',e=>{ if(e.key==='Enter') $('manualCodeBtn').click(); });
+
+async function handleCode(code){
+  await stopScan();
+  // déjà en cave ?
+  const existing = db.wines.find(w=>w.barcode===code);
+  if(existing){
+    close('scanSheet');
+    showDetail(existing.id, `Ce vin est déjà dans ta cave (${existing.qty||1} bouteille${(existing.qty||1)>1?'s':''}).`);
+    return;
+  }
+  status('scanStatus','ok',`Code <b>${code}</b> lu, recherche des infos…`);
+  let info = null;
+  try{ info = await lookup(code); }catch(e){ info = null; }
+  close('scanSheet');
+  // déjà bu dans le passé ? on reprend ses infos
+  const past = db.drunk.find(w=>w.barcode===code);
+  if(!info && past) info = {name:past.name, producer:past.producer, region:past.region, type:past.type, year:past.year, image:past.image};
+  openForm(null, {...(info||{}), barcode:code});
+  if(info) status('formStatus','ok', past && !info.fromApi ? "Tu as déjà eu ce vin, j'ai repris ses infos. Vérifie le millésime." : "Infos trouvées ✔︎ Vérifie et complète (le millésime n'est pas toujours dans la base).");
+  else status('formStatus','warn',"Ce code-barres n'est pas dans la base ouverte. Remplis la fiche à la main — l'appli s'en souviendra.");
+}
+
+async function lookup(code){
+  const fields='product_name,product_name_fr,generic_name_fr,generic_name,brands,categories_tags,labels_tags,origins,manufacturing_places,image_front_small_url,image_front_url,quantity';
+  const ctrl = new AbortController(); const to=setTimeout(()=>ctrl.abort(),8000);
+  const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=${fields}`,{signal:ctrl.signal});
+  clearTimeout(to);
+  if(!r.ok) return null;
+  const j = await r.json();
+  if(j.status!==1 || !j.product) return null;
+  const p = j.product;
+  const name = (p.product_name_fr||p.product_name||'').trim();
+  if(!name && !p.brands) return null;
+  const tags = (p.categories_tags||[]).join(' ');
+  let type='autre';
+  if(/sparkling|champagne|cremant|cava|prosecco|mousseux|petillant/.test(tags)) type='effervescent';
+  else if(/rose-wine|vins-roses|rose/.test(tags)) type='rose';
+  else if(/sweet-wine|liquoreux|moelleux|sauternes|dessert/.test(tags)) type='moelleux';
+  else if(/white-wine|vins-blancs/.test(tags)) type='blanc';
+  else if(/red-wine|vins-rouges/.test(tags)) type='rouge';
+  const ym = name.match(/\b(19[2-9]\d|20[0-4]\d)\b/);
+  // appellation depuis les catégories/labels ou l'origine
+  const regionTag = (p.categories_tags||[]).concat(p.labels_tags||[]).reverse()
+    .find(t=>/^fr:/.test(t) && !/vins?|wines?|boissons|alcool|aop|aoc|igp/.test(t.slice(3).split('-')[0]));
+  const region = (p.origins || p.manufacturing_places || (regionTag? pretty(regionTag):'')).trim();
+  return {fromApi:true, name: name || p.brands, producer: name ? (p.brands||'').split(',')[0].trim() : '', region,
+          type, year: ym?ym[1]:'', image: p.image_front_small_url || p.image_front_url || ''};
+}
+function pretty(tag){ const s=tag.replace(/^\w\w:/,'').replace(/-/g,' '); return s.charAt(0).toUpperCase()+s.slice(1); }
+
+/* ========= Formulaire ========= */
+let fType='rouge', fQty=1;
+function renderTypes(){
+  $('f_types').innerHTML = TYPES.map(t=>`<button type="button" data-k="${t.k}" class="${fType===t.k?'on':''}"><i style="background:${t.c}"></i>${t.label}</button>`).join('');
+}
+$('f_types').onclick = e=>{ const b=e.target.closest('button'); if(b){ fType=b.dataset.k; renderTypes(); } };
+$('qMinus').onclick=()=>{ fQty=Math.max(1,fQty-1); $('f_qty').textContent=fQty; };
+$('qPlus').onclick=()=>{ fQty=Math.min(999,fQty+1); $('f_qty').textContent=fQty; };
+
+function openForm(id, prefill){
+  clearStatus('formStatus');
+  const w = id ? db.wines.find(x=>x.id===id) : (prefill||{});
+  $('formTitle').textContent = id ? 'Modifier' : 'Nouvelle bouteille';
+  $('f_id').value = id||'';
+  ['name','producer','year','region','cellar','giftFrom','price','notes','image','barcode'].forEach(k=>$('f_'+k).value = w[k]??'');
+  if(!id && !w.cellar) $('f_cellar').value = safeGet('macave.lastCellar')||'';
+  fType = w.type || 'rouge'; fQty = w.qty || 1; $('f_qty').textContent=fQty; renderTypes();
+  const uniq = arr => [...new Set(arr.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'));
+  $('cellarList').innerHTML = uniq(db.wines.concat(db.drunk).map(w=>w.cellar)).map(c=>`<option value="${esc(c)}">`).join('');
+  $('giftList').innerHTML = uniq(db.wines.concat(db.drunk).map(w=>w.giftFrom)).map(c=>`<option value="${esc(c)}">`).join('');
+  updatePriceLinks();
+  open('formSheet');
+  if(!w.name) setTimeout(()=>$('f_name').focus(),300);
+}
+['f_name','f_producer','f_year'].forEach(i=>$(i).addEventListener('input',updatePriceLinks));
+function updatePriceLinks(){
+  const q = [$('f_producer').value,$('f_name').value].filter(Boolean).join(' ');
+  $('formPriceLinks').innerHTML = q ? priceLinks({name:$('f_name').value, producer:$('f_producer').value, year:$('f_year').value}) : '';
+}
+function priceLinks(w){
+  const q = [w.producer && !w.name.toLowerCase().includes(w.producer.toLowerCase()) ? w.producer : '', w.name].filter(Boolean).join(' ').trim();
+  const yr = /^\d{4}$/.test(w.year||'') ? w.year : '';
+  const ws = `https://www.wine-searcher.com/find/${encodeURIComponent(q.toLowerCase().replace(/\s+/g,'+'))}${yr?'/'+yr:''}`;
+  const vv = `https://www.vivino.com/search/wines?q=${encodeURIComponent(q+(yr?' '+yr:''))}`;
+  return `<a class="btn" href="${ws}" target="_blank" rel="noopener">💶 Wine-Searcher</a><a class="btn" href="${vv}" target="_blank" rel="noopener">🍇 Vivino</a>`;
+}
+
+$('saveBtn').onclick = ()=>{
+  const name = $('f_name').value.trim();
+  if(!name){ status('formStatus','err','Donne au moins un nom au vin.'); $('f_name').focus(); return; }
+  const year = $('f_year').value.trim();
+  if(year && !/^\d{4}$/.test(year)){ status('formStatus','err','Le millésime doit être une année sur 4 chiffres.'); return; }
+  const price = $('f_price').value.replace(',','.').replace(/[^\d.]/g,'');
+  const data = {
+    name, producer:$('f_producer').value.trim(), year, type:fType, qty:fQty,
+    region:$('f_region').value.trim(), cellar:$('f_cellar').value.trim(), giftFrom:$('f_giftFrom').value.trim(),
+    price: price ? String(parseFloat(price)) : '', notes:$('f_notes').value.trim(),
+    image:$('f_image').value, barcode:$('f_barcode').value,
+  };
+  const id = $('f_id').value;
+  if(id){ Object.assign(db.wines.find(w=>w.id===id), data); toast('Modifié ✔︎'); }
+  else { db.wines.push({id:uid(), addedAt:Date.now(), ...data}); toast(`${fQty>1?fQty+' bouteilles ajoutées':'Bouteille ajoutée'} 🍷`); }
+  if(data.cellar) safeSet('macave.lastCellar', data.cellar);
+  save(); close('formSheet'); render();
+};
+
+/* ========= Détail ========= */
+function showDetail(id, notice){
+  const inCave = !!db.wines.find(w=>w.id===id);
+  const w = inCave ? db.wines.find(w=>w.id===id) : db.drunk.find(w=>w.id===id);
+  if(!w) return;
+  const t = typeOf(w.type); const qty=w.qty||1;
+  const rows = [
+    ['Type', `<span style="color:${t.c}">●</span> ${t.label}`],
+    ['Millésime', esc(w.year||'—')],
+    w.year ? ['Âge', `${new Date().getFullYear()-(+w.year)} ans`] : null,
+    ['Domaine', esc(w.producer||'—')],
+    ['Appellation', esc(w.region||'—')],
+    ['Cave', esc(w.cellar||'—')],
+    w.giftFrom ? ['Offert par', '🎁 '+esc(w.giftFrom)] : null,
+    inCave ? ['En stock', `${qty} bouteille${qty>1?'s':''}`] : ['Bue le', new Date(w.drunkAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})],
+    ['Prix estimé', w.price ? euro(+w.price) + (inCave&&qty>1?` <small style="color:var(--muted)">(${euro(w.price*qty)} au total)</small>`:'') : '<span style="color:var(--muted)">non renseigné</span>'],
+    w.addedAt ? ['Ajouté le', new Date(w.addedAt).toLocaleDateString('fr-FR')] : null,
+  ].filter(Boolean);
+  $('detailBody').innerHTML = `
+    <h2><span></span><button class="x" data-close>×</button></h2>
+    ${notice?`<div class="status show warn">${esc(notice)}</div>`:''}
+    <div class="detail-head">
+      ${w.image?`<img src="${esc(w.image)}" alt="" onerror="this.remove()">`:''}
+      <div><div style="font-family:Georgia,serif;font-size:22px;font-weight:700;line-height:1.2">${esc(w.name)}</div>
+      <div style="color:var(--muted);margin-top:4px">${esc([w.producer,w.year].filter(Boolean).join(' · '))}</div></div>
+    </div>
+    <div class="kv">${rows.map(([k,v])=>`<div><span>${k}</span><span>${v}</span></div>`).join('')}</div>
+    ${w.notes?`<div class="kv" style="padding:10px 12px;white-space:pre-wrap">${esc(w.notes)}</div>`:''}
+    <label>Estimer le prix en ligne</label>
+    <div class="price-links">${priceLinks(w)}</div>
+    ${inCave ? `
+      <div class="actions"><button class="btn wine" id="d_drink">🥂 J'en ai bu une</button></div>
+      <div class="actions">
+        ${notice?`<button class="btn" id="d_plus">＋1 bouteille</button>`:''}
+        <button class="btn" id="d_edit">✏️ Modifier</button>
+        <button class="btn danger" id="d_del">🗑 Supprimer</button>
+      </div>` : `
+      <div class="actions">
+        <button class="btn wine" id="d_restore">↩︎ Remettre en cave</button>
+        <button class="btn danger" id="d_del">🗑 Effacer</button>
+      </div>`}
+  `;
+  open('detailSheet');
+  const on=(i,f)=>{ const b=$(i); if(b) b.onclick=f; };
+  on('d_drink', ()=>drink(w.id));
+  on('d_plus', ()=>{ w.qty=(w.qty||1)+1; save(); render(); toast(`${w.qty} bouteilles en cave`); close('detailSheet'); });
+  on('d_edit', ()=>{ close('detailSheet'); openForm(w.id); });
+  on('d_del', ()=>{
+    if(!confirm(inCave ? `Supprimer « ${w.name} » de la cave (toutes les bouteilles) ? Utilise plutôt « J'en ai bu une » pour garder l'historique.` : `Effacer « ${w.name} » de l'historique ?`)) return;
+    if(inCave) db.wines = db.wines.filter(x=>x.id!==w.id); else db.drunk = db.drunk.filter(x=>x.id!==w.id);
+    save(); render(); close('detailSheet'); toast('Supprimé');
+  });
+  on('d_restore', ()=>{
+    db.drunk = db.drunk.filter(x=>x.id!==w.id);
+    const same = db.wines.find(x=>x.name===w.name && x.year===w.year && x.cellar===w.cellar);
+    if(same) same.qty=(same.qty||1)+1;
+    else { const {drunkAt, ...rest} = w; db.wines.push({...rest, id:uid(), qty:1}); }
+    save(); render(); close('detailSheet'); toast('Remis en cave');
+  });
+}
+function drink(id){
+  const w = db.wines.find(x=>x.id===id); if(!w) return;
+  const {qty, ...rest} = w;
+  db.drunk.push({...rest, id:uid(), drunkAt:Date.now()});
+  const remaining = (w.qty||1) - 1;
+  if(remaining>0) w.qty = remaining; else db.wines = db.wines.filter(x=>x.id!==id);
+  save(); render(); close('detailSheet');
+  toast(remaining>0 ? `Santé ! 🥂 Il en reste ${remaining}` : 'Santé ! 🥂 Dernière bouteille, rangée dans « Bues »');
+}
+
+/* ========= Événements ========= */
+$('list').onclick = e=>{ const c=e.target.closest('.wcard'); if(c) showDetail(c.dataset.id); };
+$('typeChips').onclick = e=>{ const c=e.target.closest('.chip'); if(c){ ui.type=c.dataset.type; render(); } };
+$('search').oninput = e=>{ ui.q=e.target.value; render(); };
+$('sort').value = ui.sort;
+$('sort').onchange = e=>{ ui.sort=e.target.value; safeSet('macave.sort',ui.sort); render(); };
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  ui.tab=b.dataset.tab; ui.type='all'; $('sort').style.display = ui.tab==='cave'?'':'none'; render();
+});
+$('scanBtn').onclick = startScan;
+$('addManualBtn').onclick = ()=>openForm(null,{});
+$('menuBtn').onclick = ()=>open('menuSheet');
+
+$('exportBtn').onclick = ()=>{
+  const blob = new Blob([JSON.stringify(db,null,2)],{type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download = `ma-cave-${new Date().toISOString().slice(0,10)}.json`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000); toast('Sauvegarde téléchargée');
+};
+$('importBtn').onclick = ()=>$('importFile').click();
+$('importFile').onchange = async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const d = JSON.parse(await f.text());
+    if(!Array.isArray(d.wines)) throw 0;
+    if(!confirm(`Remplacer ta cave actuelle par cette sauvegarde (${d.wines.length} références) ?`)) return;
+    db = {wines:d.wines, drunk:d.drunk||[]}; save(); render(); close('menuSheet'); toast('Sauvegarde importée ✔︎');
+  }catch(err){ toast("Ce fichier n'est pas une sauvegarde valide"); }
+  e.target.value='';
+};
+$('wipeBtn').onclick = ()=>{
+  if(confirm('Effacer TOUTE la cave et l’historique ? Exporte une sauvegarde avant si tu veux les garder.')){ db={wines:[],drunk:[]}; save(); render(); close('menuSheet'); }
+};
+
+if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
+render();
+</script>
+</body>
+</html>
