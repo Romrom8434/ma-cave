@@ -10,7 +10,6 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   :root{
     --bg:#f7f2ee; --card:#fff; --ink:#2b1b1f; --muted:#8a7a7e; --line:#eadfd9;
@@ -68,8 +67,18 @@
   .types button i{width:10px;height:10px;border-radius:50%;display:inline-block}
   .types button.on{border-color:var(--wine);background:#7a17301a;font-weight:600}
   .actions{display:flex;gap:8px;margin-top:16px}.actions>*{flex:1}
-  #reader{width:100%;border-radius:14px;overflow:hidden;background:#000;min-height:220px}
-  #reader video{border-radius:14px}
+  .cam{position:relative;width:100%;aspect-ratio:4/3;border-radius:14px;overflow:hidden;background:#000}
+  .cam video{width:100%;height:100%;object-fit:cover;display:block}
+  .cam .frame{position:absolute;left:8%;right:8%;top:30%;bottom:30%;border:3px solid #ffffffcc;border-radius:12px;box-shadow:0 0 0 999px #0000004d;transition:border-color .2s}
+  .cam .frame.hit{border-color:#4ade80}
+  .cam .laser{position:absolute;left:4%;right:4%;top:50%;height:2px;background:#ff3b5c;box-shadow:0 0 8px #ff3b5c;animation:laser 1.6s ease-in-out infinite}
+  @keyframes laser{0%,100%{transform:translateY(-28px)}50%{transform:translateY(28px)}}
+  .cam .camtools{position:absolute;right:8px;top:8px;display:flex;gap:6px}
+  .cam .camtools button{border:0;border-radius:999px;width:42px;height:42px;font-size:19px;background:#0000008c;color:#fff}
+  .cam .camtools button.on{background:#facc15;color:#000}
+  .cam .zoom{position:absolute;left:12px;right:12px;bottom:10px;display:none;align-items:center;gap:8px;color:#fff;font-size:13px}
+  .cam .zoom input{flex:1}
+  .cam .loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;text-align:center;padding:20px}
   .hint{font-size:13px;color:var(--muted);margin:8px 0}
   .status{font-size:14px;padding:10px 12px;border-radius:10px;margin:10px 0;display:none}
   .status.show{display:block}
@@ -128,9 +137,20 @@
 <div class="sheet-bg" id="scanSheet">
   <div class="sheet">
     <h2>Scanner une bouteille <button class="x" data-close>×</button></h2>
-    <div id="reader"></div>
-    <p class="hint">Vise le code-barres de l'étiquette arrière, bien à plat et éclairé.</p>
+    <div class="cam" id="cam">
+      <video id="video" playsinline muted></video>
+      <div class="frame" id="frame"></div>
+      <div class="laser"></div>
+      <div class="camtools">
+        <button type="button" id="torchBtn" style="display:none" aria-label="Lampe">🔦</button>
+      </div>
+      <div class="zoom" id="zoomBox">🔍<input type="range" id="zoom" min="1" max="3" step="0.1" value="1"></div>
+      <div class="loading" id="camLoading">Ouverture de la caméra…</div>
+    </div>
+    <p class="hint">Tiens le téléphone à 15–20 cm, code-barres <b>à l'horizontale</b> dans le cadre. Sur une bouteille courbée, tourne-la pour que les barres soient bien à plat face à toi.</p>
     <div class="status" id="scanStatus"></div>
+    <button class="btn full" id="photoBtn">📸 Ça ne lit pas ? Prendre une photo du code</button>
+    <input type="file" id="photoInput" accept="image/*" capture="environment" hidden>
     <label>Ou tape le code-barres</label>
     <div class="row">
       <input class="field" id="manualCode" inputmode="numeric" placeholder="ex. 3175529657725">
@@ -303,26 +323,127 @@ function clearStatus(el){ $(el).className='status'; }
 let toastT; function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200); }
 
 /* ========= Scanner ========= */
-let scanner=null, scanning=false, busy=false;
+/* Moteur : ZXing (WebAssembly) sur tous les téléphones, + le détecteur natif d'Android en renfort.
+   On alterne plusieurs méthodes de lecture (une tient mieux le flou, une autre les reflets)
+   et on exige 2 lectures identiques avant de valider, pour éviter les faux codes. */
+const ZX_URL = 'https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/dist/es/reader/index.js';
+const BINARIZERS = ['LocalAverage','FixedThreshold','GlobalHistogram'];
+let zx=null, native=null, stream=null, track=null, loopT=null, busy=false, torchOn=false, frameN=0;
+const work = document.createElement('canvas'), wctx = work.getContext('2d',{willReadFrequently:true});
+async function getDetector(){
+  if(!native && 'BarcodeDetector' in window){
+    try{ const sup=await BarcodeDetector.getSupportedFormats();
+      if(sup.includes('ean_13')) native=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']}); }catch(e){}
+  }
+  if(!zx){ zx = await import(ZX_URL); }
+  return true;
+}
+// lit une image (vidéo, photo…) en recadrant/réduisant, renvoie les codes EAN valides
+async function readCodes(src, w, h, crop, binarizer){
+  const [cx,cy,cw,ch] = crop ? [w*(1-crop[0])/2, h*(1-crop[1])/2, w*crop[0], h*crop[1]] : [0,0,w,h];
+  const k = Math.min(1, 1600/Math.max(cw,ch));
+  work.width=Math.round(cw*k); work.height=Math.round(ch*k);
+  wctx.drawImage(src, cx,cy,cw,ch, 0,0,work.width,work.height);
+  const img = wctx.getImageData(0,0,work.width,work.height);
+  const r = await zx.readBarcodes(img, {formats:['EAN13','EAN8','UPCA','UPCE'], tryHarder:true, tryRotate:true, binarizer, maxNumberOfSymbols:1});
+  return r.filter(x=>x.isValid).map(x=>x.text).filter(validEAN);
+}
+function validEAN(c){
+  if(!/^\d{8}$|^\d{12,13}$/.test(c)) return false;
+  const d=c.split('').map(Number), chk=d.pop();
+  const s=d.reverse().reduce((a,n,i)=>a+n*(i%2?1:3),0);
+  return (10-s%10)%10===chk;
+}
 async function startScan(){
   clearStatus('scanStatus'); $('manualCode').value=''; busy=false;
+  $('camLoading').style.display='flex'; $('camLoading').textContent='Ouverture de la caméra…';
+  $('torchBtn').style.display='none'; $('zoomBox').style.display='none'; $('frame').classList.remove('hit');
   open('scanSheet');
-  if(typeof Html5Qrcode==='undefined'){ status('scanStatus','warn',"Le scanner n'a pas pu se charger (connexion ?). Tape le code à la main."); return; }
   try{
-    const F = Html5QrcodeSupportedFormats;
-    scanner = scanner || new Html5Qrcode('reader',{formatsToSupport:[F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E], experimentalFeatures:{useBarCodeDetectorIfSupported:true}, verbose:false});
-    await scanner.start({facingMode:'environment'}, {fps:12, qrbox:(w,h)=>({width:Math.min(w*0.85,320),height:Math.min(h*0.45,140)})}, onCode, ()=>{});
-    scanning=true;
+    stream = await navigator.mediaDevices.getUserMedia({audio:false, video:{
+      facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080}}});
   }catch(e){
-    status('scanStatus','err',"Impossible d'accéder à l'appareil photo. Autorise la caméra dans les réglages du navigateur, ou tape le code à la main.");
+    $('camLoading').textContent='📷 Caméra indisponible';
+    status('scanStatus','err',"Impossible d'accéder à la caméra. Autorise-la dans les réglages du navigateur, ou utilise la photo / la saisie à la main.");
+    return;
+  }
+  const v=$('video'); v.srcObject=stream; await v.play().catch(()=>{});
+  track = stream.getVideoTracks()[0];
+  setupCamControls();
+  try{ await getDetector(); }
+  catch(e){ $('camLoading').textContent=''; status('scanStatus','warn',"Le lecteur n'a pas pu se charger (connexion ?). Tape le code à la main."); return; }
+  $('camLoading').style.display='none';
+  scanLoop();
+}
+async function setupCamControls(){
+  if(!track || !track.getCapabilities) return;
+  const cap = track.getCapabilities();
+  const adv = {};
+  if(cap.focusMode && cap.focusMode.includes('continuous')) adv.focusMode='continuous';
+  if(Object.keys(adv).length) track.applyConstraints({advanced:[adv]}).catch(()=>{});
+  if(cap.torch){ $('torchBtn').style.display=''; torchOn=false; $('torchBtn').classList.remove('on'); }
+  if(cap.zoom && cap.zoom.max>1){
+    const z=$('zoom'); z.min=cap.zoom.min||1; z.max=Math.min(cap.zoom.max,5); z.step=cap.zoom.step||0.1;
+    // un léger zoom aide beaucoup : on peut reculer et la mise au point se fait mieux
+    const start=Math.min(1.8, +z.max); z.value=start; track.applyConstraints({advanced:[{zoom:start}]}).catch(()=>{});
+    $('zoomBox').style.display='flex';
   }
 }
-async function stopScan(){ if(scanner && scanning){ try{ await scanner.stop(); }catch(e){} scanning=false; } }
+$('torchBtn').onclick=()=>{ torchOn=!torchOn; $('torchBtn').classList.toggle('on',torchOn); track&&track.applyConstraints({advanced:[{torch:torchOn}]}).catch(()=>{}); };
+$('zoom').oninput=e=>{ track&&track.applyConstraints({advanced:[{zoom:+e.target.value}]}).catch(()=>{}); };
+
+let recent=[];
+async function scanLoop(){
+  if(!stream || busy) return;
+  const v=$('video');
+  if(v.readyState>=2 && v.videoWidth){
+    try{
+      frameN++;
+      let codes=[];
+      if(native && frameN%2===0) codes=(await native.detect(v)).map(r=>r.rawValue).filter(validEAN);
+      else codes=await readCodes(v, v.videoWidth, v.videoHeight, [0.9,0.75], BINARIZERS[frameN%3]);
+      const c=codes[0]||null;
+      // on garde les 8 dernières lectures : on valide un code lu au moins 2 fois,
+      // seulement si aucun AUTRE code n'a été lu entre-temps (sinon image trop floue → on continue)
+      recent.push(c); if(recent.length>8) recent.shift();
+      const seen=[...new Set(recent.filter(Boolean))];
+      $('frame').classList.toggle('hit', !!c);
+      if(c && seen.length===1 && recent.filter(x=>x===c).length>=2){ onCode(c); return; }
+      if(seen.length>1 && c) status('scanStatus','warn','Lecture hésitante… rapproche-toi un peu ou allume la lampe 🔦');
+    }catch(e){}
+  }
+  loopT = setTimeout(scanLoop, 60);
+}
+async function stopScan(){
+  clearTimeout(loopT); recent=[];
+  if(track && torchOn) await track.applyConstraints({advanced:[{torch:false}]}).catch(()=>{});
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; track=null; }
+  $('video').srcObject=null;
+}
 function onCode(code){
   if(busy) return; busy=true;
   if(navigator.vibrate) navigator.vibrate(80);
   handleCode(code);
 }
+// Mode photo : l'appareil photo natif fait une vraie mise au point, en pleine résolution
+$('photoBtn').onclick=()=>$('photoInput').click();
+$('photoInput').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  status('scanStatus','ok','Analyse de la photo…');
+  try{
+    await getDetector();
+    const img = await createImageBitmap(f);
+    // sur une photo on essaie toutes les méthodes et on garde le code le plus souvent lu
+    const votes={};
+    for(const bz of BINARIZERS) for(const crop of [null,[0.6,0.6]])
+      (await readCodes(img, img.width, img.height, crop, bz)).forEach(c=>votes[c]=(votes[c]||0)+1);
+    if(native) (await native.detect(img)).map(r=>r.rawValue).filter(validEAN).forEach(c=>votes[c]=(votes[c]||0)+2);
+    const codes=Object.keys(votes).sort((x,y)=>votes[y]-votes[x]);
+    if(codes.length>1) status('scanStatus','warn',"Photo un peu floue, lecture pas sûre. Reprends-la en te rapprochant, ou tape les chiffres.");
+    else if(codes.length) onCode(codes[0]);
+    else status('scanStatus','warn',"Pas de code trouvé sur la photo. Rapproche-toi pour que le code remplisse la largeur de l'image, ou tape les chiffres sous le code.");
+  }catch(err){ status('scanStatus','err',"Impossible d'analyser la photo. Tape le code à la main."); }
+};
 $('manualCodeBtn').onclick = ()=>{ const c=$('manualCode').value.replace(/\D/g,''); if(c.length>=8){ busy=true; handleCode(c);} else status('scanStatus','warn','Le code doit faire au moins 8 chiffres.'); };
 $('manualCode').addEventListener('keydown',e=>{ if(e.key==='Enter') $('manualCodeBtn').click(); });
 
@@ -343,8 +464,9 @@ async function handleCode(code){
   const past = db.drunk.find(w=>w.barcode===code);
   if(!info && past) info = {name:past.name, producer:past.producer, region:past.region, type:past.type, year:past.year, image:past.image};
   openForm(null, {...(info||{}), barcode:code});
-  if(info) status('formStatus','ok', past && !info.fromApi ? "Tu as déjà eu ce vin, j'ai repris ses infos. Vérifie le millésime." : "Infos trouvées ✔︎ Vérifie et complète (le millésime n'est pas toujours dans la base).");
-  else status('formStatus','warn',"Ce code-barres n'est pas dans la base ouverte. Remplis la fiche à la main — l'appli s'en souviendra.");
+  const codeNote = `<br><small>Code lu : <b>${code}</b> — vérifie qu'il correspond aux chiffres sous le code-barres.</small>`;
+  if(info) status('formStatus','ok', past && !info.fromApi ? "Tu as déjà eu ce vin, j'ai repris ses infos. Vérifie le millésime." : "Infos trouvées ✔︎ Vérifie et complète (le millésime n'est pas toujours dans la base)." + codeNote);
+  else status('formStatus','warn',"Ce code-barres n'est pas dans la base ouverte. Remplis la fiche à la main — l'appli s'en souviendra." + codeNote);
 }
 
 async function lookup(code){
